@@ -30,11 +30,14 @@ namespace CyclesHell.Interaction
         private IInteractable currentTarget;
         private bool isReadingNote;
         private int noteOpenedFrame = -1;
+        private int lastNoteClosedFrame = -1;
 
         public PlayerInventory Inventory => playerInventory;
         public PlayerHealth Health => playerHealth;
         public CamcorderController Camcorder => camcorderController;
         public bool IsReadingNote => isReadingNote;
+        public int LastNoteClosedFrame => lastNoteClosedFrame;
+        public bool InputBlocked { get; set; }
 
         private void Awake()
         {
@@ -89,7 +92,7 @@ namespace CyclesHell.Interaction
 
         private void Update()
         {
-            if (playerHealth != null && playerHealth.IsDead)
+            if (InputBlocked || (playerHealth != null && playerHealth.IsDead))
             {
                 ClearCurrentTarget();
                 return;
@@ -197,6 +200,7 @@ namespace CyclesHell.Interaction
             if (!isReadingNote) return;
 
             isReadingNote = false;
+            lastNoteClosedFrame = Time.frameCount;
 
             if (survivalHUD != null)
             {

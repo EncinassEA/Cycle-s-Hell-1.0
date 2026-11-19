@@ -25,6 +25,7 @@ namespace CyclesHell.Player
         [SerializeField] private float minPitch = -80f;
         [SerializeField] private float maxPitch = 80f;
         [SerializeField] private bool lockCursorOnStart = true;
+        [SerializeField] private bool allowEscapeCursorUnlock = false;
 
         [Header("Head-Bobbing")]
         [SerializeField] private bool enableHeadBob = true;
@@ -56,6 +57,11 @@ namespace CyclesHell.Player
         private bool movementPaused;
         private bool lookPaused;
         private bool cursorAutoControlPaused;
+
+        private float shakeTimer;
+        private float shakeDuration;
+        private float shakeIntensity;
+        private Vector3 currentShakeOffset;
 
         public bool IsMoving { get; private set; }
         public bool IsSprinting { get; private set; }
@@ -192,7 +198,7 @@ namespace CyclesHell.Player
 
         private void HandleCursorLock()
         {
-            if (unlockCursorAction.WasPressedThisFrame())
+            if (allowEscapeCursorUnlock && unlockCursorAction.WasPressedThisFrame())
             {
                 SetCursorLocked(false);
             }
@@ -200,6 +206,13 @@ namespace CyclesHell.Player
             {
                 SetCursorLocked(true);
             }
+        }
+
+        public void TriggerCameraShake(float intensity = 0.16f, float duration = 0.28f)
+        {
+            shakeIntensity = Mathf.Max(shakeIntensity, intensity);
+            shakeDuration = Mathf.Max(duration, 0.05f);
+            shakeTimer = shakeDuration;
         }
 
         public void SetCursorLocked(bool locked)
@@ -265,12 +278,31 @@ namespace CyclesHell.Player
 
         private void HandleHeadBob()
         {
-            if (!enableHeadBob || cameraPivot == null)
+            if (cameraPivot == null)
             {
                 return;
             }
 
-            if (IsMoving)
+            if (shakeTimer > 0f)
+            {
+                shakeTimer -= Time.deltaTime;
+                float normalized = Mathf.Clamp01(shakeTimer / Mathf.Max(0.01f, shakeDuration));
+                float mag = shakeIntensity * normalized;
+                float sx = (Mathf.PerlinNoise(Time.time * 42f, 0.1f) * 2f - 1f) * mag;
+                float sy = (Mathf.PerlinNoise(0.2f, Time.time * 42f) * 2f - 1f) * mag;
+                currentShakeOffset = new Vector3(sx, sy, 0f);
+                if (shakeTimer <= 0f)
+                {
+                    shakeIntensity = 0f;
+                    currentShakeOffset = Vector3.zero;
+                }
+            }
+            else
+            {
+                currentShakeOffset = Vector3.zero;
+            }
+
+            if (enableHeadBob && IsMoving)
             {
                 float speedRatio = Mathf.Clamp01(currentHorizontalVelocity.magnitude / sprintSpeed);
                 float freq = walkBobFrequency * (IsSprinting ? sprintBobMultiplier : 1f);
@@ -282,15 +314,16 @@ namespace CyclesHell.Player
                 float offsetY = Mathf.Sin(bobTimer) * ampY * Mathf.Lerp(0.6f, 1f, speedRatio);
                 float offsetX = Mathf.Cos(bobTimer * 0.5f) * ampX * Mathf.Lerp(0.6f, 1f, speedRatio);
 
-                Vector3 targetLocalPos = defaultPivotLocalPos + new Vector3(offsetX, offsetY, 0f);
+                Vector3 targetLocalPos = defaultPivotLocalPos + new Vector3(offsetX, offsetY, 0f) + currentShakeOffset;
                 cameraPivot.localPosition = Vector3.Lerp(cameraPivot.localPosition, targetLocalPos, 1f - Mathf.Exp(-14f * Time.deltaTime));
             }
             else
             {
                 bobTimer = 0f;
+                Vector3 targetLocalPos = defaultPivotLocalPos + currentShakeOffset;
                 cameraPivot.localPosition = Vector3.Lerp(
                     cameraPivot.localPosition,
-                    defaultPivotLocalPos,
+                    targetLocalPos,
                     1f - Mathf.Exp(-bobReturnSpeed * Time.deltaTime));
             }
         }

@@ -225,5 +225,21 @@ namespace CyclesHell.Survival
 #endif
             }
         }
+
+        public void ReturnToMainMenu(string mainMenuSceneName = "SampleScene")
+        {
+            Time.timeScale = 1f;
+            Cursor.lockState = CursorLockMode.None;
+            Cursor.visible = true;
+
+            if (!string.IsNullOrWhiteSpace(mainMenuSceneName) && Application.CanStreamedLevelBeLoaded(mainMenuSceneName))
+            {
+                SceneManager.LoadScene(mainMenuSceneName);
+            }
+            else
+            {
+                SceneManager.LoadScene(0);
+            }
+        }
     }
 }

@@ -50,6 +50,8 @@ namespace CyclesHell.Survival
         [SerializeField] private GameObject deathScreenRoot;
         [SerializeField] private TMP_Text deathTitleText;
         [SerializeField] private UnityEngine.UI.Button restartButton;
+        [SerializeField] private UnityEngine.UI.Button deathMainMenuButton;
+        [SerializeField] private string mainMenuSceneName = "SampleScene";
 
         private float currentDamageAlpha;
         private float toastTimer;
@@ -87,6 +89,11 @@ namespace CyclesHell.Survival
             {
                 restartButton.onClick.AddListener(HandleRestartButtonClicked);
             }
+
+            if (deathMainMenuButton != null)
+            {
+                deathMainMenuButton.onClick.AddListener(HandleMainMenuButtonClicked);
+            }
         }
 
         private void OnDisable()
@@ -108,6 +115,11 @@ namespace CyclesHell.Survival
             if (restartButton != null)
             {
                 restartButton.onClick.RemoveListener(HandleRestartButtonClicked);
+            }
+
+            if (deathMainMenuButton != null)
+            {
+                deathMainMenuButton.onClick.RemoveListener(HandleMainMenuButtonClicked);
             }
         }
 
@@ -208,6 +220,14 @@ namespace CyclesHell.Survival
             if (playerHealth != null)
             {
                 playerHealth.RestartCurrentScene();
+            }
+        }
+
+        private void HandleMainMenuButtonClicked()
+        {
+            if (playerHealth != null)
+            {
+                playerHealth.ReturnToMainMenu(mainMenuSceneName);
             }
         }
 
