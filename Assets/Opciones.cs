@@ -1,5 +1,6 @@
 using UnityEngine;
 using UnityEngine.SceneManagement;
+using CyclesHell.UI;
 
 public class Opciones : MonoBehaviour
 {
@@ -8,6 +9,7 @@ public class Opciones : MonoBehaviour
         Time.timeScale = 1f;
         Cursor.lockState = CursorLockMode.None;
         Cursor.visible = true;
+        GameSettingsManager.ApplySavedSettings();
     }
 
     public void CargarEscena(string NombreScena)
@@ -19,5 +21,8 @@ public class Opciones : MonoBehaviour
     public void Salir()
     {
         Application.Quit();
+#if UNITY_EDITOR
+        UnityEditor.EditorApplication.isPlaying = false;
+#endif
     }
 }

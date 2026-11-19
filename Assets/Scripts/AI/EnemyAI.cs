@@ -362,6 +362,11 @@ namespace CyclesHell.AI
                 effectiveRange += nightVisionSightBonus;
                 effectiveHalfAngle += 10f;
             }
+            else if (playerCamcorder != null && playerCamcorder.IsLampOn)
+            {
+                effectiveRange += nightVisionSightBonus * 0.85f;
+                effectiveHalfAngle += 8f;
+            }
 
             if (playerController != null && playerController.IsSprinting)
             {

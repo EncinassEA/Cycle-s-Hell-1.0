@@ -1,5 +1,6 @@
 using UnityEngine;
 using UnityEngine.InputSystem;
+using CyclesHell.UI;
 
 namespace CyclesHell.Player
 {
@@ -126,6 +127,7 @@ namespace CyclesHell.Player
             lookAction?.Enable();
             unlockCursorAction?.Enable();
             lockCursorAction?.Enable();
+            GameSettingsManager.OnSettingsChanged += ApplySavedSensitivity;
         }
 
         private void OnDisable()
@@ -135,6 +137,7 @@ namespace CyclesHell.Player
             lookAction?.Disable();
             unlockCursorAction?.Disable();
             lockCursorAction?.Disable();
+            GameSettingsManager.OnSettingsChanged -= ApplySavedSensitivity;
         }
 
         private void OnDestroy()
@@ -148,10 +151,16 @@ namespace CyclesHell.Player
 
         private void Start()
         {
+            ApplySavedSensitivity();
             if (lockCursorOnStart)
             {
                 SetCursorLocked(true);
             }
+        }
+
+        private void ApplySavedSensitivity()
+        {
+            mouseSensitivity = GameSettingsManager.MouseSensitivity;
         }
 
         private void Update()

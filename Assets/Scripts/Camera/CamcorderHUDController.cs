@@ -24,10 +24,13 @@ namespace CyclesHell.Camcorder
         [SerializeField] private Color batteryWarningColor = new Color(1f, 0.72f, 0.18f, 0.95f);
         [SerializeField] private Color batteryCriticalColor = new Color(0.95f, 0.18f, 0.18f, 0.98f);
 
-        [Header("REC y Visión Nocturna (Arriba Derecha)")]
+        [Header("REC, Lámpara y Visión Nocturna (Arriba Derecha)")]
         [SerializeField] private UnityEngine.UI.Image recDotImage;
         [SerializeField] private TMP_Text recText;
         [SerializeField] private TMP_Text nightVisionBadgeText;
+        [SerializeField] private TMP_Text lampStatusText;
+        [SerializeField] private Color lampOnColor = new Color(1f, 0.94f, 0.78f, 0.95f);
+        [SerializeField] private Color lampOffColor = new Color(0.72f, 0.75f, 0.72f, 0.55f);
         [SerializeField] private float recBlinkInterval = 0.55f;
 
         [Header("Fecha y Reloj (Abajo Izquierda)")]
@@ -70,6 +73,7 @@ namespace CyclesHell.Camcorder
             {
                 camcorder.OnCamcorderStateChanged += HandleCamcorderToggled;
                 camcorder.OnNightVisionStateChanged += HandleNightVisionToggled;
+                camcorder.OnLampStateChanged += HandleLampToggled;
             }
         }
 
@@ -79,6 +83,7 @@ namespace CyclesHell.Camcorder
             {
                 camcorder.OnCamcorderStateChanged -= HandleCamcorderToggled;
                 camcorder.OnNightVisionStateChanged -= HandleNightVisionToggled;
+                camcorder.OnLampStateChanged -= HandleLampToggled;
             }
         }
 
@@ -88,6 +93,7 @@ namespace CyclesHell.Camcorder
             {
                 HandleCamcorderToggled(camcorder.IsCamcorderOn);
                 HandleNightVisionToggled(camcorder.IsNightVisionOn);
+                HandleLampToggled(camcorder.IsLampOn);
             }
 
             UpdateDateTime(forceUpdate: true);
@@ -139,6 +145,11 @@ namespace CyclesHell.Camcorder
                 nightVisionBadgeText.gameObject.SetActive(isNightVisionOn);
             }
 
+            if (camcorder != null)
+            {
+                HandleLampToggled(camcorder.IsLampOn);
+            }
+
             Color targetBracketColor = isNightVisionOn ? nightVisionBracketColor : normalBracketColor;
             if (viewfinderBracketImages != null)
             {
@@ -150,6 +161,17 @@ namespace CyclesHell.Camcorder
                     }
                 }
             }
+        }
+
+        private void HandleLampToggled(bool isLampOn)
+        {
+            if (lampStatusText == null)
+            {
+                return;
+            }
+
+            lampStatusText.text = isLampOn ? "LIGHT: ON" : "LIGHT: OFF";
+            lampStatusText.color = isLampOn ? lampOnColor : lampOffColor;
         }
 
         private void UpdateRecBlink()
