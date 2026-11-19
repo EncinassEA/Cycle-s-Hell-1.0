@@ -100,8 +100,16 @@ namespace CyclesHell.UI
                 return;
             }
 
-            // No abrir pausa si el jugador está muerto o leyendo un expediente (ni en el mismo frame en que cerró uno)
+            // No abrir pausa si el jugador está muerto, viendo la intro/victoria o leyendo un expediente
             if (playerHealth != null && playerHealth.IsDead)
+            {
+                return;
+            }
+
+            if (StoryObjectiveManager.Instance != null &&
+                (StoryObjectiveManager.Instance.IsIntroActive ||
+                 StoryObjectiveManager.Instance.IsVictoryActive ||
+                 Time.frameCount <= StoryObjectiveManager.Instance.LastIntroClosedFrame))
             {
                 return;
             }

@@ -2,6 +2,7 @@ using UnityEngine;
 using UnityEngine.Rendering;
 using UnityEngine.Rendering.Universal;
 using CyclesHell.Survival;
+using CyclesHell.Camcorder;
 
 namespace CyclesHell.AI
 {
@@ -44,7 +45,13 @@ namespace CyclesHell.AI
         private float initialNvGrain = 0.72f;
 
         private float currentTension;
+        private float jumpscareGlitchTimer;
         private AudioClip generatedClip;
+
+        public void TriggerJumpscareGlitch(float duration = 0.65f)
+        {
+            jumpscareGlitchTimer = Mathf.Max(jumpscareGlitchTimer, duration);
+        }
 
         private void Awake()
         {
@@ -156,14 +163,29 @@ namespace CyclesHell.AI
             }
 
             float dt = Time.deltaTime;
+            if (jumpscareGlitchTimer > 0f)
+            {
+                jumpscareGlitchTimer = Mathf.Max(0f, jumpscareGlitchTimer - dt);
+            }
+
             currentTension = Mathf.Lerp(currentTension, targetTension, 1f - Mathf.Exp(-smoothSpeed * dt));
             if (currentTension < 0.005f && targetTension <= 0f)
             {
                 currentTension = 0f;
             }
 
-            ApplyPostProcessing(currentTension);
-            ApplyHUDInterference(currentTension, isPausedOrDead);
+            float visualTension = jumpscareGlitchTimer > 0f ? Mathf.Max(currentTension, 0.92f) : currentTension;
+
+            if (CameraShake.Instance != null)
+            {
+                float subtleShake = (!isPausedOrDead && currentTension > 0.12f)
+                    ? Mathf.Lerp(0.004f, enemyAI != null && enemyAI.IsChasing ? 0.036f : 0.020f, currentTension)
+                    : 0f;
+                CameraShake.Instance.SetContinuousShake(subtleShake);
+            }
+
+            ApplyPostProcessing(visualTension);
+            ApplyHUDInterference(visualTension, isPausedOrDead);
             ApplyProximityAudio(currentTension, isPausedOrDead);
         }
 

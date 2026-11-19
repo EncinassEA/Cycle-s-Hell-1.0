@@ -3,6 +3,8 @@ using UnityEngine.AI;
 using CyclesHell.Player;
 using CyclesHell.Camcorder;
 using CyclesHell.Survival;
+using CyclesHell.Audio;
+using CyclesHell.UI;
 
 namespace CyclesHell.AI
 {
@@ -11,14 +13,14 @@ namespace CyclesHell.AI
         Patrol,
         Investigate,
         Chase,
-        Attack
+        Attack,
+        Flee
     }
 
     /// <summary>
     /// IA de "Sujeto_04" sobre NavMesh (Unity 6) con máquina de estados:
-    /// PATROL -> INVESTIGATE -> CHASE -> ATTACK.
-    /// Detecta al jugador por cono de visión + Raycast (mayor rango con visión nocturna o al correr)
-    /// y por proximidad/sonido al correr.
+    /// PATROL -> INVESTIGATE -> CHASE -> ATTACK y FLEE (al recibir Flash Morado UV).
+    /// Conectada a EnemyProceduralAnimator (Animator real + respaldo procedural), CameraShake y HorrorAudioManager.
     /// </summary>
     [RequireComponent(typeof(NavMeshAgent))]
     public class EnemyAI : MonoBehaviour
@@ -28,19 +30,11 @@ namespace CyclesHell.AI
         [SerializeField] private FirstPersonController playerController;
         [SerializeField] private PlayerHealth playerHealth;
         [SerializeField] private CamcorderController playerCamcorder;
+        [SerializeField] private EnemyProceduralAnimator enemyAnimator;
         [SerializeField] private Transform[] patrolWaypoints;
 
-        [Header("Visuales Procedurales")]
-        [SerializeField] private Transform bodyVisualRoot;
-        [SerializeField] private Transform headPivot;
-        [SerializeField] private float eyeHeight = 1.92f;
-
-        [Header("Velocidades")]
-        [SerializeField] private float patrolSpeed = 1.65f;
-        [SerializeField] private float investigateSpeed = 2.45f;
-        [SerializeField] private float chaseSpeed = 4.35f;
-
         [Header("Percepción (Visión y Sonido)")]
+        [SerializeField] private float eyeHeight = 1.85f;
         [SerializeField] private float baseSightRange = 11.5f;
         [SerializeField] private float nightVisionSightBonus = 5.5f;
         [SerializeField] private float sprintSightBonus = 3.5f;
@@ -51,17 +45,25 @@ namespace CyclesHell.AI
         [SerializeField] private float loseSightDuration = 5.0f;
         [SerializeField] private LayerMask visionObstacleMask = ~0;
 
-        [Header("Patrulla e Investigación")]
-        [SerializeField] private float waypointArrivalDistance = 0.65f;
-        [SerializeField] private float waypointPauseTime = 1.1f;
-        [SerializeField] private float investigateWaitTime = 3.2f;
+        [Header("Velocidades")]
+        [SerializeField] private float patrolSpeed = 1.65f;
+        [SerializeField] private float investigateSpeed = 2.45f;
+        [SerializeField] private float chaseSpeed = 4.35f;
+        [SerializeField] private float fleeSpeed = 5.45f;
+
+        [Header("Patrulla, Investigación y Huida (Flash Morado)")]
+        [SerializeField] private float waypointArrivalDistance = 0.70f;
+        [SerializeField] private float waypointPauseTime = 1.0f;
+        [SerializeField] private float investigateWaitTime = 3.0f;
+        [SerializeField] private float fleeRecoilDuration = 0.60f;
+        [SerializeField] private float fleeDuration = 8.0f;
 
         [Header("Combate")]
         [SerializeField] private float attackRange = 1.85f;
         [SerializeField] private float attackCooldown = 1.5f;
         [SerializeField] private float attackDamage = 35f;
-        [SerializeField] private float attackShakeIntensity = 0.18f;
-        [SerializeField] private float attackShakeDuration = 0.30f;
+        [SerializeField] private float attackShakeIntensity = 0.22f;
+        [SerializeField] private float attackShakeDuration = 0.34f;
 
         private NavMeshAgent agent;
         private EnemyState currentState = EnemyState.Patrol;
@@ -72,14 +74,15 @@ namespace CyclesHell.AI
         private float awarenessTimer;
         private float timeSinceLastSeen;
         private float attackCooldownTimer;
-        private float lungeAnimTimer;
+        private float fleeRecoilTimer;
+        private float fleeTimer;
 
         private Vector3 lastKnownPlayerPos;
-        private Vector3 defaultBodyLocalPos;
-        private Quaternion defaultHeadLocalRot;
+        private Vector3 fleeDestination;
 
         public EnemyState CurrentState => currentState;
         public bool IsChasing => currentState == EnemyState.Chase || currentState == EnemyState.Attack;
+        public bool IsFleeing => currentState == EnemyState.Flee;
         public float DistanceToPlayer => playerTransform != null
             ? Vector3.Distance(transform.position, playerTransform.position)
             : float.MaxValue;
@@ -87,6 +90,7 @@ namespace CyclesHell.AI
         private void Awake()
         {
             agent = GetComponent<NavMeshAgent>();
+            if (enemyAnimator == null) enemyAnimator = GetComponent<EnemyProceduralAnimator>();
 
             if (playerTransform == null)
             {
@@ -100,9 +104,6 @@ namespace CyclesHell.AI
                 if (playerHealth == null) playerHealth = playerTransform.GetComponent<PlayerHealth>();
                 if (playerCamcorder == null) playerCamcorder = playerTransform.GetComponentInChildren<CamcorderController>();
             }
-
-            if (bodyVisualRoot != null) defaultBodyLocalPos = bodyVisualRoot.localPosition;
-            if (headPivot != null) defaultHeadLocalRot = headPivot.localRotation;
         }
 
         private void Start()
@@ -120,21 +121,22 @@ namespace CyclesHell.AI
 
         private void Update()
         {
-            if (agent == null || !agent.isOnNavMesh)
-            {
-                return;
-            }
+            if (agent == null || !agent.isOnNavMesh) return;
 
             if (attackCooldownTimer > 0f)
             {
                 attackCooldownTimer -= Time.deltaTime;
             }
 
-            bool playerAlive = playerTransform != null && (playerHealth == null || !playerHealth.IsDead);
+            // Durante la intro VHS o victoria, patrulla calmadamente sin atacar al jugador
+            bool storyBlocksCombat = StoryObjectiveManager.Instance != null &&
+                                     (StoryObjectiveManager.Instance.IsIntroActive || StoryObjectiveManager.Instance.IsVictoryActive);
+
+            bool playerAlive = !storyBlocksCombat && playerTransform != null && (playerHealth == null || !playerHealth.IsDead);
             bool canSeePlayer = false;
             bool heardPlayer = false;
 
-            if (playerAlive)
+            if (playerAlive && currentState != EnemyState.Flee)
             {
                 canSeePlayer = EvaluateVision(out bool isCloseOrClear);
                 heardPlayer = EvaluateHearing();
@@ -168,7 +170,7 @@ namespace CyclesHell.AI
                     }
                 }
             }
-            else if (currentState == EnemyState.Chase || currentState == EnemyState.Attack)
+            else if (!playerAlive && (currentState == EnemyState.Chase || currentState == EnemyState.Attack))
             {
                 EnterState(EnemyState.Patrol);
             }
@@ -187,9 +189,40 @@ namespace CyclesHell.AI
                 case EnemyState.Attack:
                     UpdateAttack(playerAlive);
                     break;
+                case EnemyState.Flee:
+                    UpdateFlee();
+                    break;
             }
 
-            UpdateProceduralMotion();
+            if (enemyAnimator != null)
+            {
+                Vector3 vel = agent.velocity;
+                vel.y = 0f;
+                enemyAnimator.SetAnimationState(vel.magnitude, IsChasing, IsFleeing);
+            }
+        }
+
+        /// <summary>
+        /// Llamado por CamcorderController cuando el Flash Morado (UV) impacta a Sujeto_04 con línea de visión.
+        /// </summary>
+        public void TriggerUvFlashFlee(Vector3 flashOrigin)
+        {
+            fleeDestination = FindFarthestWaypointPosition(flashOrigin);
+            fleeRecoilTimer = fleeRecoilDuration;
+            fleeTimer = fleeDuration;
+            awarenessTimer = 0f;
+
+            if (enemyAnimator != null)
+            {
+                enemyAnimator.TriggerFleeRecoil();
+            }
+
+            if (HorrorAudioManager.Instance != null)
+            {
+                HorrorAudioManager.Instance.PlayEnemyFleeScreech();
+            }
+
+            EnterState(EnemyState.Flee);
         }
 
         private void EnterState(EnemyState nextState)
@@ -230,15 +263,18 @@ namespace CyclesHell.AI
                 case EnemyState.Attack:
                     agent.isStopped = true;
                     break;
+
+                case EnemyState.Flee:
+                    agent.isStopped = true;
+                    agent.speed = fleeSpeed;
+                    agent.autoBraking = false;
+                    break;
             }
         }
 
         private void UpdatePatrol()
         {
-            if (patrolWaypoints == null || patrolWaypoints.Length == 0)
-            {
-                return;
-            }
+            if (patrolWaypoints == null || patrolWaypoints.Length == 0) return;
 
             if (!agent.pathPending && agent.remainingDistance <= waypointArrivalDistance)
             {
@@ -257,7 +293,6 @@ namespace CyclesHell.AI
             if (!agent.pathPending && agent.remainingDistance <= waypointArrivalDistance + 0.25f)
             {
                 investigateTimer += Time.deltaTime;
-                // Rotación inquietante buscando alrededor
                 transform.Rotate(Vector3.up, Mathf.Sin(investigateTimer * 2.4f) * 55f * Time.deltaTime);
 
                 if (investigateTimer >= investigateWaitTime)
@@ -296,7 +331,6 @@ namespace CyclesHell.AI
 
                 if (timeSinceLastSeen >= loseSightDuration)
                 {
-                    // Perdió de vista al jugador por ~5s: busca brevemente en la última posición y vuelve a patrullar
                     EnterState(EnemyState.Investigate);
                 }
             }
@@ -333,17 +367,64 @@ namespace CyclesHell.AI
             }
         }
 
+        private void UpdateFlee()
+        {
+            if (fleeRecoilTimer > 0f)
+            {
+                fleeRecoilTimer -= Time.deltaTime;
+                if (fleeRecoilTimer <= 0f)
+                {
+                    agent.isStopped = false;
+                    agent.speed = fleeSpeed;
+                    SetDestinationOnNavMesh(fleeDestination);
+                }
+                return;
+            }
+
+            fleeTimer -= Time.deltaTime;
+            if (fleeTimer <= 0f)
+            {
+                SelectNearestWaypoint();
+                EnterState(EnemyState.Patrol);
+                return;
+            }
+
+            if (!agent.pathPending && agent.remainingDistance <= waypointArrivalDistance + 0.4f && playerTransform != null)
+            {
+                // Si llegó al waypoint lejano pero aún queda tiempo de huida, mantente alejado
+                fleeDestination = FindFarthestWaypointPosition(playerTransform.position);
+                SetDestinationOnNavMesh(fleeDestination);
+            }
+        }
+
         private void PerformAttack()
         {
             attackCooldownTimer = attackCooldown;
-            lungeAnimTimer = 0.28f;
+
+            if (enemyAnimator != null)
+            {
+                enemyAnimator.TriggerAttack();
+            }
 
             if (playerHealth != null)
             {
+                bool wasAlive = !playerHealth.IsDead;
                 playerHealth.TakeDamage(attackDamage);
+
+                if (wasAlive && playerHealth.IsDead)
+                {
+                    // Susto dramático al morir por Sujeto_04
+                    if (HorrorAudioManager.Instance != null) HorrorAudioManager.Instance.PlayJumpscareStinger();
+                    if (CameraShake.Instance != null) CameraShake.Instance.Shake(0.36f, 0.55f);
+                    return;
+                }
             }
 
-            if (playerController != null)
+            if (CameraShake.Instance != null)
+            {
+                CameraShake.Instance.Shake(attackShakeIntensity, attackShakeDuration);
+            }
+            else if (playerController != null)
             {
                 playerController.TriggerCameraShake(attackShakeIntensity, attackShakeDuration);
             }
@@ -378,21 +459,12 @@ namespace CyclesHell.AI
             Vector3 toPlayer = targetPos - eyePos;
             float dist = toPlayer.magnitude;
 
-            if (dist > effectiveRange)
-            {
-                return false;
-            }
+            if (dist > effectiveRange) return false;
 
             float angle = Vector3.Angle(transform.forward, toPlayer.normalized);
-            if (angle > effectiveHalfAngle && dist > 2.2f)
-            {
-                return false;
-            }
+            if (angle > effectiveHalfAngle && dist > 2.2f) return false;
 
-            if (!HasLineOfSightToPlayer(effectiveRange))
-            {
-                return false;
-            }
+            if (!HasLineOfSightToPlayer(effectiveRange)) return false;
 
             isCloseOrClear = dist < 7.5f || angle < 26f;
             return true;
@@ -407,9 +479,8 @@ namespace CyclesHell.AI
             Vector3 dir = (targetPos - eyePos).normalized;
             float dist = Mathf.Min(Vector3.Distance(eyePos, targetPos), maxDist);
 
-            // Evita colisionar con el propio collider del enemigo desplazando ligeramente el origen
-            Vector3 rayOrigin = eyePos + dir * 0.42f;
-            float rayLength = Mathf.Max(0.1f, dist - 0.42f);
+            Vector3 rayOrigin = eyePos + dir * 0.45f;
+            float rayLength = Mathf.Max(0.1f, dist - 0.45f);
 
             if (Physics.Raycast(rayOrigin, dir, out RaycastHit hit, rayLength, visionObstacleMask, QueryTriggerInteraction.Ignore))
             {
@@ -421,35 +492,60 @@ namespace CyclesHell.AI
 
         private bool EvaluateHearing()
         {
-            if (playerTransform == null || playerController == null)
-            {
-                return false;
-            }
-
+            if (playerTransform == null || playerController == null) return false;
             float dist = Vector3.Distance(transform.position, playerTransform.position);
-
-            if (playerController.IsSprinting && dist <= hearingSprintRange)
-            {
-                return true;
-            }
-
-            if (playerController.IsMoving && dist <= hearingWalkRange)
-            {
-                return true;
-            }
-
+            if (playerController.IsSprinting && dist <= hearingSprintRange) return true;
+            if (playerController.IsMoving && dist <= hearingWalkRange) return true;
             return false;
+        }
+
+        private Vector3 FindFarthestWaypointPosition(Vector3 awayFromPos)
+        {
+            if (patrolWaypoints == null || patrolWaypoints.Length == 0)
+            {
+                Vector3 dirAway = (transform.position - awayFromPos).normalized;
+                return transform.position + dirAway * 12f;
+            }
+
+            Transform bestWp = patrolWaypoints[0];
+            float bestDistSqr = -1f;
+            for (int i = 0; i < patrolWaypoints.Length; i++)
+            {
+                if (patrolWaypoints[i] == null) continue;
+                float d = (patrolWaypoints[i].position - awayFromPos).sqrMagnitude;
+                if (d > bestDistSqr)
+                {
+                    bestDistSqr = d;
+                    bestWp = patrolWaypoints[i];
+                }
+            }
+
+            return bestWp != null ? bestWp.position : transform.position;
         }
 
         private void MoveToCurrentWaypoint()
         {
-            if (patrolWaypoints == null || patrolWaypoints.Length == 0) return;
+            if (patrolWaypoints == null || patrolWaypoints.Length == 0 || !agent.isOnNavMesh) return;
 
-            Transform wp = patrolWaypoints[currentWaypointIndex];
-            if (wp != null)
+            NavMeshPath testPath = new NavMeshPath();
+            for (int tries = 0; tries < patrolWaypoints.Length; tries++)
             {
-                SetDestinationOnNavMesh(wp.position);
+                int idx = (currentWaypointIndex + tries) % patrolWaypoints.Length;
+                Transform wp = patrolWaypoints[idx];
+                if (wp == null) continue;
+
+                if (NavMesh.SamplePosition(wp.position, out NavMeshHit hit, 2.0f, NavMesh.AllAreas) &&
+                    agent.CalculatePath(hit.position, testPath) &&
+                    testPath.status == NavMeshPathStatus.PathComplete)
+                {
+                    currentWaypointIndex = idx;
+                    agent.SetDestination(hit.position);
+                    return;
+                }
             }
+
+            Transform fallback = patrolWaypoints[currentWaypointIndex];
+            if (fallback != null) SetDestinationOnNavMesh(fallback.position);
         }
 
         private void SelectNearestWaypoint()
@@ -474,7 +570,6 @@ namespace CyclesHell.AI
         private void SetDestinationOnNavMesh(Vector3 targetPos)
         {
             if (!agent.isOnNavMesh) return;
-
             if (NavMesh.SamplePosition(targetPos, out NavMeshHit hit, 2.5f, NavMesh.AllAreas))
             {
                 agent.SetDestination(hit.position);
@@ -482,39 +577,6 @@ namespace CyclesHell.AI
             else
             {
                 agent.SetDestination(targetPos);
-            }
-        }
-
-        private void UpdateProceduralMotion()
-        {
-            float speedMag = agent.velocity.magnitude;
-            float t = Time.time;
-
-            if (bodyVisualRoot != null)
-            {
-                float swayFreq = IsChasing ? 9.5f : 4.2f;
-                float swayAmp = speedMag > 0.1f ? (IsChasing ? 0.055f : 0.03f) : 0.008f;
-                float bobY = Mathf.Abs(Mathf.Sin(t * swayFreq)) * swayAmp;
-                float tiltZ = Mathf.Sin(t * swayFreq * 0.5f) * (IsChasing ? 4.5f : 2.2f);
-
-                float lungeZ = 0f;
-                if (lungeAnimTimer > 0f)
-                {
-                    lungeAnimTimer -= Time.deltaTime;
-                    lungeZ = Mathf.Sin(Mathf.Clamp01(lungeAnimTimer / 0.28f) * Mathf.PI) * 0.35f;
-                }
-
-                bodyVisualRoot.localPosition = defaultBodyLocalPos + new Vector3(0f, bobY, lungeZ);
-                bodyVisualRoot.localRotation = Quaternion.Euler(IsChasing ? 10f : 3f, 0f, tiltZ);
-            }
-
-            if (headPivot != null)
-            {
-                // Ligero tic perturbador en la cabeza estilo terror psicológico
-                float twitch = Mathf.PerlinNoise(t * (IsChasing ? 7f : 2.5f), 0.71f) > 0.78f
-                    ? (Mathf.PerlinNoise(t * 28f, 3.1f) * 2f - 1f) * 18f
-                    : Mathf.Sin(t * 1.4f) * 6f;
-                headPivot.localRotation = defaultHeadLocalRot * Quaternion.Euler(0f, 0f, twitch);
             }
         }
     }

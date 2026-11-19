@@ -46,6 +46,14 @@ namespace CyclesHell.Camcorder
         [SerializeField] private TMP_Text zoomText;
         [SerializeField] private UnityEngine.UI.Image zoomFillImage;
 
+        [Header("Flash Morado (UV)")]
+        [SerializeField] private TMP_Text uvFlashStatusText;
+        [SerializeField] private UnityEngine.UI.Image uvFlashScreenOverlay;
+        [SerializeField] private Color uvReadyColor = new Color(0.80f, 0.45f, 1f, 0.96f);
+        [SerializeField] private Color uvCooldownColor = new Color(0.75f, 0.65f, 0.82f, 0.65f);
+        [SerializeField] private float uvOverlayPeakAlpha = 0.42f;
+        [SerializeField] private float uvOverlayFadeSpeed = 1.6f;
+
         [Header("Tinte del Visor")]
         [SerializeField] private UnityEngine.UI.Image[] viewfinderBracketImages;
         [SerializeField] private Color normalBracketColor = new Color(1f, 1f, 1f, 0.72f);
@@ -56,6 +64,7 @@ namespace CyclesHell.Camcorder
         private int lastDisplayedSecond = -1;
         private float blinkTimer;
         private bool recDotVisible = true;
+        private float currentUvOverlayAlpha;
 
         private void Awake()
         {
@@ -74,6 +83,7 @@ namespace CyclesHell.Camcorder
                 camcorder.OnCamcorderStateChanged += HandleCamcorderToggled;
                 camcorder.OnNightVisionStateChanged += HandleNightVisionToggled;
                 camcorder.OnLampStateChanged += HandleLampToggled;
+                camcorder.OnUvFlashFired += HandleUvFlashFired;
             }
         }
 
@@ -84,6 +94,7 @@ namespace CyclesHell.Camcorder
                 camcorder.OnCamcorderStateChanged -= HandleCamcorderToggled;
                 camcorder.OnNightVisionStateChanged -= HandleNightVisionToggled;
                 camcorder.OnLampStateChanged -= HandleLampToggled;
+                camcorder.OnUvFlashFired -= HandleUvFlashFired;
             }
         }
 
@@ -115,6 +126,44 @@ namespace CyclesHell.Camcorder
             UpdateDateTime(forceUpdate: false);
             UpdateBatteryUI();
             UpdateZoomUI();
+            UpdateUvFlashUI();
+        }
+
+        private void HandleUvFlashFired()
+        {
+            currentUvOverlayAlpha = uvOverlayPeakAlpha;
+        }
+
+        private void UpdateUvFlashUI()
+        {
+            if (uvFlashScreenOverlay != null)
+            {
+                if (currentUvOverlayAlpha > 0f)
+                {
+                    currentUvOverlayAlpha = Mathf.MoveTowards(currentUvOverlayAlpha, 0f, uvOverlayFadeSpeed * Time.deltaTime);
+                }
+                Color c = uvFlashScreenOverlay.color;
+                c.a = currentUvOverlayAlpha;
+                uvFlashScreenOverlay.color = c;
+            }
+
+            if (uvFlashStatusText == null || camcorder == null) return;
+
+            if (camcorder.UvFlashCooldownRemaining > 0.05f)
+            {
+                uvFlashStatusText.text = string.Format(CultureInfo.InvariantCulture, "UV FLASH: {0:0.0}S", camcorder.UvFlashCooldownRemaining);
+                uvFlashStatusText.color = uvCooldownColor;
+            }
+            else if (!camcorder.HasEnoughBatteryForUv)
+            {
+                uvFlashStatusText.text = "UV FLASH: SIN BAT.";
+                uvFlashStatusText.color = batteryCriticalColor;
+            }
+            else
+            {
+                uvFlashStatusText.text = "UV FLASH [Q]: LISTO";
+                uvFlashStatusText.color = uvReadyColor;
+            }
         }
 
         private void HandleCamcorderToggled(bool isOn)
