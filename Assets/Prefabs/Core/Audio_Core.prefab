@@ -52,6 +52,6 @@ MonoBehaviour:
   chaseClip: {fileID: 0}
   suspenseDistance: 14
   crossfadeSpeed: 2.4
-  maxAmbientVolume: 0.24
-  maxSuspenseVolume: 0.44
-  maxChaseVolume: 0.56
+  maxAmbientVolume: 0.55
+  maxSuspenseVolume: 0.48
+  maxChaseVolume: 0.62

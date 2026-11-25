@@ -44,6 +44,8 @@ namespace CyclesHell.UI
         [Header("HUD de Objetivos")]
         [SerializeField] private TMP_Text objectiveHudText;
         [SerializeField] private int requiredClues = 5;
+        [SerializeField] private string explorationObjectiveFormat = "Objetivo: Explora el laboratorio y encuentra pistas sobre tus compañeros ({0}/{1})";
+        [SerializeField] private string completedObjectiveText = "Objetivo: Has descubierto lo que les pasó. Escapa por la salida del laboratorio";
 
         [Header("Pantalla de Fin de Nivel (Victoria)")]
         [SerializeField] private GameObject victoryPanelRoot;
@@ -59,6 +61,8 @@ namespace CyclesHell.UI
         private float typingProgress;
         private float postTypingTimer;
         private int lastIntroClosedFrame = -1;
+        private string customObjectiveOverride;
+        private Color? customObjectiveColor;
 
         public bool ExternalIntroControlled { get; set; }
         public bool IsIntroActive => isIntroActive || isExternalIntroActive;
@@ -222,18 +226,39 @@ namespace CyclesHell.UI
             return newlyAdded;
         }
 
+        public void SetCustomObjectiveOverride(string customText, Color? color = null)
+        {
+            customObjectiveOverride = customText;
+            customObjectiveColor = color;
+            UpdateObjectiveHud();
+        }
+
+        public void ClearCustomObjectiveOverride()
+        {
+            customObjectiveOverride = null;
+            customObjectiveColor = null;
+            UpdateObjectiveHud();
+        }
+
         private void UpdateObjectiveHud()
         {
             if (objectiveHudText == null) return;
 
+            if (!string.IsNullOrWhiteSpace(customObjectiveOverride))
+            {
+                objectiveHudText.text = customObjectiveOverride;
+                objectiveHudText.color = customObjectiveColor ?? new Color(1.0f, 0.86f, 0.45f, 0.96f);
+                return;
+            }
+
             if (HasAllClues)
             {
-                objectiveHudText.text = "Objetivo: Has descubierto lo que les pasó. Escapa por la salida del laboratorio";
+                objectiveHudText.text = completedObjectiveText;
                 objectiveHudText.color = new Color(0.50f, 1.0f, 0.58f, 0.96f);
             }
             else
             {
-                objectiveHudText.text = $"Objetivo: Explora el laboratorio y encuentra pistas sobre tus compañeros ({CluesFound}/{requiredClues})";
+                objectiveHudText.text = string.Format(explorationObjectiveFormat, CluesFound, requiredClues);
                 objectiveHudText.color = new Color(0.92f, 0.94f, 0.90f, 0.88f);
             }
         }

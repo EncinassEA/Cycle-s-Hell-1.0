@@ -28,9 +28,9 @@ namespace CyclesHell.Audio
         [Header("Mezcla y Distancias")]
         [SerializeField] private float suspenseDistance = 14f;
         [SerializeField] private float crossfadeSpeed = 2.4f;
-        [SerializeField] private float maxAmbientVolume = 0.24f;
-        [SerializeField] private float maxSuspenseVolume = 0.44f;
-        [SerializeField] private float maxChaseVolume = 0.56f;
+        [SerializeField] private float maxAmbientVolume = 0.55f;
+        [SerializeField] private float maxSuspenseVolume = 0.48f;
+        [SerializeField] private float maxChaseVolume = 0.62f;
 
         private AudioSource ambientSource;
         private AudioSource suspenseSource;
@@ -60,9 +60,9 @@ namespace CyclesHell.Audio
                 playerHealth = playerTransform.GetComponent<PlayerHealth>();
             }
 
-            ambientSource = CreateLoopSource("Layer_Ambient", ambientClip ?? (genAmbient = CreateAmbientClip()));
-            suspenseSource = CreateLoopSource("Layer_Suspense", suspenseClip ?? (genSuspense = CreateSuspenseClip()));
-            chaseSource = CreateLoopSource("Layer_Chase", chaseClip ?? (genChase = CreateChaseClip()));
+            ambientSource = CreateLoopSource("Layer_Ambient", ambientClip ?? (genAmbient = CreateAmbientClip()), playOnAwake: true);
+            suspenseSource = CreateLoopSource("Layer_Suspense", suspenseClip ?? (genSuspense = CreateSuspenseClip()), playOnAwake: false);
+            chaseSource = CreateLoopSource("Layer_Chase", chaseClip ?? (genChase = CreateChaseClip()), playOnAwake: false);
 
             sfxSource = gameObject.AddComponent<AudioSource>();
             sfxSource.playOnAwake = false;
@@ -77,13 +77,18 @@ namespace CyclesHell.Audio
 
         private void Start()
         {
+            CyclesHell.UI.GameSettingsManager.ApplySavedSettings();
+
+            maxAmbientVolume = Mathf.Clamp(maxAmbientVolume, 0.45f, 0.70f);
+            ambientSource.spatialBlend = 0f;
+            ambientSource.loop = true;
             ambientSource.volume = maxAmbientVolume;
             suspenseSource.volume = 0f;
             chaseSource.volume = 0f;
 
-            ambientSource.Play();
-            suspenseSource.Play();
-            chaseSource.Play();
+            if (!ambientSource.isPlaying) ambientSource.Play();
+            if (!suspenseSource.isPlaying) suspenseSource.Play();
+            if (!chaseSource.isPlaying) chaseSource.Play();
         }
 
         private void OnDestroy()
@@ -159,16 +164,16 @@ namespace CyclesHell.Audio
             if (sfxSource != null && sfxClueFound != null) sfxSource.PlayOneShot(sfxClueFound, 0.55f);
         }
 
-        private AudioSource CreateLoopSource(string childName, AudioClip clip)
+        private AudioSource CreateLoopSource(string childName, AudioClip clip, bool playOnAwake = false)
         {
             GameObject go = new GameObject(childName);
             go.transform.SetParent(transform, false);
             AudioSource src = go.AddComponent<AudioSource>();
             src.clip = clip;
             src.loop = true;
-            src.playOnAwake = false;
+            src.playOnAwake = playOnAwake;
             src.spatialBlend = 0f;
-            src.volume = 0f;
+            src.volume = playOnAwake ? maxAmbientVolume : 0f;
             return src;
         }
 
@@ -179,25 +184,47 @@ namespace CyclesHell.Audio
 
         private static AudioClip CreateAmbientClip()
         {
+            // Loop seamless de 12 segundos: viento nocturno filtrado paso-bajos + drone grave sombrío
             const int sr = 22050;
-            const float dur = 6f;
+            const float dur = 12f;
             int n = Mathf.RoundToInt(sr * dur);
             float[] data = new float[n];
             uint rng = 123456789u;
-            float lp = 0f;
+            float lp1 = 0f;
+            float lp2 = 0f;
             for (int i = 0; i < n; i++)
             {
                 float t = i / (float)sr;
-                float mod = 0.7f + 0.3f * Mathf.Sin(2f * Mathf.PI * 0.5f * t);
-                float drone = Mathf.Sin(2f * Mathf.PI * 46f * t) * 0.28f +
-                              Mathf.Sin(2f * Mathf.PI * 52f * t) * 0.16f * mod +
-                              Mathf.Sin(2f * Mathf.PI * 92f * t) * 0.06f;
+                // Frecuencias múltiplos exactos de 1/12 Hz para un loop 100% libre de saltos
+                float windSwell = 0.55f + 0.45f * Mathf.Sin(2f * Mathf.PI * (2f / 12f) * t)
+                                        + 0.22f * Mathf.Sin(2f * Mathf.PI * (5f / 12f) * t + 1.1f);
+                float droneMod = 0.68f + 0.32f * Mathf.Sin(2f * Mathf.PI * (3f / 12f) * t);
+
+                float subDrone = Mathf.Sin(2f * Mathf.PI * 42f * t) * 0.30f +
+                                 Mathf.Sin(2f * Mathf.PI * 47f * t) * 0.18f * droneMod +
+                                 Mathf.Sin(2f * Mathf.PI * 84f * t) * 0.08f +
+                                 Mathf.Sin(2f * Mathf.PI * 126f * t) * 0.035f * windSwell;
+
+                // Ruido blanco con doble filtro paso-bajos para viento nocturno / aire subterráneo
                 rng ^= rng << 13; rng ^= rng >> 17; rng ^= rng << 5;
                 float w = ((rng & 0xFFFF) / 32768f) - 1f;
-                lp = lp * 0.94f + w * 0.06f;
-                data[i] = Mathf.Clamp(drone + lp * 0.22f, -0.8f, 0.8f);
+                lp1 = lp1 * 0.955f + w * 0.045f;
+                lp2 = lp2 * 0.920f + lp1 * 0.080f;
+
+                float wind = lp2 * 2.4f * Mathf.Clamp(windSwell, 0.25f, 1.25f);
+                data[i] = Mathf.Clamp(subDrone + wind, -0.88f, 0.88f);
             }
-            AudioClip c = AudioClip.Create("Procedural_LabAmbient", n, 1, sr, false);
+
+            // Crossfade sutil en los últimos 0.15s para garantizar cero click en el bucle
+            int fadeSamples = Mathf.RoundToInt(sr * 0.15f);
+            for (int i = 0; i < fadeSamples; i++)
+            {
+                float k = i / (float)fadeSamples;
+                int tailIdx = n - fadeSamples + i;
+                data[tailIdx] = Mathf.Lerp(data[tailIdx], data[i], k);
+            }
+
+            AudioClip c = AudioClip.Create("Procedural_DarkNightAmbient_12s", n, 1, sr, false);
             c.SetData(data, 0);
             return c;
         }

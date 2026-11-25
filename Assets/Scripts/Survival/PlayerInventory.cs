@@ -168,6 +168,9 @@ namespace CyclesHell.Survival
                     case "labkey":
                         labels.Add("LLAVE SECTOR B");
                         break;
+                    case "bedroomkey":
+                        labels.Add("LLAVE RECÁMARA");
+                        break;
                     default:
                         labels.Add(key.ToUpperInvariant());
                         break;
