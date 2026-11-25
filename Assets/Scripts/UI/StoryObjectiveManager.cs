@@ -43,7 +43,7 @@ namespace CyclesHell.UI
 
         [Header("HUD de Objetivos")]
         [SerializeField] private TMP_Text objectiveHudText;
-        [SerializeField] private int requiredClues = 4;
+        [SerializeField] private int requiredClues = 5;
 
         [Header("Pantalla de Fin de Nivel (Victoria)")]
         [SerializeField] private GameObject victoryPanelRoot;
@@ -54,17 +54,20 @@ namespace CyclesHell.UI
         private InputAction skipIntroAction;
 
         private bool isIntroActive;
+        private bool isExternalIntroActive;
         private bool isVictoryActive;
         private float typingProgress;
         private float postTypingTimer;
         private int lastIntroClosedFrame = -1;
 
-        public bool IsIntroActive => isIntroActive;
+        public bool ExternalIntroControlled { get; set; }
+        public bool IsIntroActive => isIntroActive || isExternalIntroActive;
         public bool IsVictoryActive => isVictoryActive;
         public int LastIntroClosedFrame => lastIntroClosedFrame;
         public int CluesFound => collectedClueIds.Count;
         public int RequiredClues => requiredClues;
         public bool HasAllClues => collectedClueIds.Count >= requiredClues;
+        public string SynopsisText => synopsisText;
 
         public event Action OnAllCluesCollected;
 
@@ -112,10 +115,30 @@ namespace CyclesHell.UI
             if (victoryPanelRoot != null) victoryPanelRoot.SetActive(false);
             UpdateObjectiveHud();
 
+            if (ExternalIntroControlled)
+            {
+                if (introPanelRoot != null) introPanelRoot.SetActive(false);
+                return;
+            }
+
             if (introPanelRoot != null)
             {
                 StartIntro();
             }
+        }
+
+        public void SetExternalIntroActive(bool active)
+        {
+            isExternalIntroActive = active;
+            if (!active)
+            {
+                lastIntroClosedFrame = Time.frameCount;
+            }
+            if (introPanelRoot != null && active)
+            {
+                introPanelRoot.SetActive(false);
+            }
+            SetGameplayControlsBlocked(active, unlockCursor: false);
         }
 
         private void Update()

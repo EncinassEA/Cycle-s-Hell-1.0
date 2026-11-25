@@ -5,6 +5,7 @@ using CyclesHell.Camcorder;
 using CyclesHell.Survival;
 using CyclesHell.Audio;
 using CyclesHell.UI;
+using CyclesHell.Interaction;
 
 namespace CyclesHell.AI
 {
@@ -79,6 +80,8 @@ namespace CyclesHell.AI
 
         private Vector3 lastKnownPlayerPos;
         private Vector3 fleeDestination;
+        private DoorInteractable[] sceneDoors;
+        private float doorCheckTimer;
 
         public EnemyState CurrentState => currentState;
         public bool IsChasing => currentState == EnemyState.Chase || currentState == EnemyState.Attack;
@@ -116,6 +119,7 @@ namespace CyclesHell.AI
                 }
             }
 
+            sceneDoors = FindObjectsByType<DoorInteractable>();
             EnterState(EnemyState.Patrol);
         }
 
@@ -199,6 +203,32 @@ namespace CyclesHell.AI
                 Vector3 vel = agent.velocity;
                 vel.y = 0f;
                 enemyAnimator.SetAnimationState(vel.magnitude, IsChasing, IsFleeing);
+            }
+
+            UpdateNearbyUnlockedDoors();
+        }
+
+        private void UpdateNearbyUnlockedDoors()
+        {
+            doorCheckTimer -= Time.deltaTime;
+            if (doorCheckTimer > 0f) return;
+            doorCheckTimer = 0.18f;
+
+            if (sceneDoors == null || sceneDoors.Length == 0) return;
+
+            Vector3 pos = transform.position;
+            const float openRadiusSqr = 2.05f * 2.05f;
+            for (int i = 0; i < sceneDoors.Length; i++)
+            {
+                DoorInteractable door = sceneDoors[i];
+                if (door == null || door.IsLocked || door.IsOpen || !door.AllowEnemyAutoOpen) continue;
+
+                Vector3 diff = door.transform.position - pos;
+                diff.y = 0f;
+                if (diff.sqrMagnitude <= openRadiusSqr)
+                {
+                    door.OpenByEnemy();
+                }
             }
         }
 

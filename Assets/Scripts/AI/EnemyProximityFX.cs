@@ -66,6 +66,30 @@ namespace CyclesHell.AI
                 playerHealth = playerTransform.GetComponent<PlayerHealth>();
             }
 
+            if (baseVolume == null)
+            {
+                GameObject baseGo = GameObject.Find("Base_GlobalVolume");
+                if (baseGo != null) baseVolume = baseGo.GetComponent<Volume>();
+            }
+
+            if (nightVisionVolume == null)
+            {
+                GameObject nvGo = GameObject.Find("NightVision_GlobalVolume");
+                if (nvGo != null) nightVisionVolume = nvGo.GetComponent<Volume>();
+            }
+
+            if (viewfinderCanvasGroup == null)
+            {
+                GameObject vfGo = GameObject.Find("ViewfinderRoot");
+                if (vfGo != null) viewfinderCanvasGroup = vfGo.GetComponent<CanvasGroup>();
+            }
+
+            if (vhsGlitchBarImage == null)
+            {
+                GameObject gbGo = GameObject.Find("VHS_GlitchBar");
+                if (gbGo != null) vhsGlitchBarImage = gbGo.GetComponent<UnityEngine.UI.Image>();
+            }
+
             if (proximityAudioSource == null)
             {
                 proximityAudioSource = GetComponent<AudioSource>();

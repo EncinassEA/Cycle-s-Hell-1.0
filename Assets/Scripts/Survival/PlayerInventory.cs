@@ -149,5 +149,32 @@ namespace CyclesHell.Survival
         }
 
         public bool HasAnyKey => collectedKeys.Count > 0;
+
+        public string GetCollectedKeysSummary()
+        {
+            if (collectedKeys.Count == 0) return string.Empty;
+
+            var labels = new List<string>(collectedKeys.Count);
+            foreach (string key in collectedKeys)
+            {
+                switch (key.ToLowerInvariant())
+                {
+                    case "maintenancekey":
+                        labels.Add("LLAVE MANT.");
+                        break;
+                    case "archivoscard":
+                        labels.Add("TARJ. ARCHIVOS");
+                        break;
+                    case "labkey":
+                        labels.Add("LLAVE SECTOR B");
+                        break;
+                    default:
+                        labels.Add(key.ToUpperInvariant());
+                        break;
+                }
+            }
+
+            return "ACCESOS: " + string.Join(" | ", labels);
+        }
     }
 }

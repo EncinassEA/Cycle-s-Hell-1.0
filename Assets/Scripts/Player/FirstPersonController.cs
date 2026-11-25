@@ -224,6 +224,24 @@ namespace CyclesHell.Player
             shakeTimer = shakeDuration;
         }
 
+        /// <summary>
+        /// Sincroniza los ángulos internos de mirada con la rotación actual del jugador y su pivote de cámara
+        /// (útil al terminar una cinemática en tiempo real sin tirones).
+        /// </summary>
+        public void SyncLookAnglesFromTransform()
+        {
+            targetYaw = transform.eulerAngles.y;
+            currentYaw = targetYaw;
+
+            if (cameraPivot != null)
+            {
+                targetPitch = Mathf.Clamp(NormalizeAngle(cameraPivot.localEulerAngles.x), minPitch, maxPitch);
+                currentPitch = targetPitch;
+                cameraPivot.localPosition = defaultPivotLocalPos;
+                cameraPivot.localRotation = Quaternion.Euler(currentPitch, 0f, 0f);
+            }
+        }
+
         public void SetCursorLocked(bool locked)
         {
             isCursorLocked = locked;

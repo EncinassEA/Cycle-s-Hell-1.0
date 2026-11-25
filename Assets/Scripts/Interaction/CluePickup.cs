@@ -56,8 +56,8 @@ namespace CyclesHell.Interaction
                 int found = StoryObjectiveManager.Instance.CluesFound;
                 int total = StoryObjectiveManager.Instance.RequiredClues;
                 string msg = found >= total
-                    ? "¡Todas las pistas reunidas (4/4)! Escapa por la salida del laboratorio."
-                    : $"Pista registrada ({found}/{total})";
+                    ? $"¡Todos los expedientes reunidos ({found}/{total})! Escapa por la salida del laboratorio."
+                    : $"Expediente registrado ({found}/{total})";
                 interactor.ShowStatusMessage(msg);
             }
 

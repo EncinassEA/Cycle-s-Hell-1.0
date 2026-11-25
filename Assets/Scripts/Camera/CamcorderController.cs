@@ -100,6 +100,12 @@ namespace CyclesHell.Camcorder
 
             if (enemyAI == null) enemyAI = FindAnyObjectByType<EnemyAI>();
 
+            if (nightVisionVolume == null)
+            {
+                GameObject nvGo = GameObject.Find("NightVision_GlobalVolume");
+                if (nvGo != null) nightVisionVolume = nvGo.GetComponent<Volume>();
+            }
+
             if (targetCamera != null && baseFieldOfView <= 0f) baseFieldOfView = targetCamera.fieldOfView;
             if (infraredLight != null && baseInfraredIntensity <= 0f) baseInfraredIntensity = infraredLight.intensity;
             if (camcorderLampLight != null && baseLampIntensity <= 0f) baseLampIntensity = camcorderLampLight.intensity;

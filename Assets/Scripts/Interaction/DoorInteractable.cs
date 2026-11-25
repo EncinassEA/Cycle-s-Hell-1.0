@@ -1,9 +1,13 @@
 using UnityEngine;
+using UnityEngine.AI;
 
 namespace CyclesHell.Interaction
 {
     /// <summary>
-    /// Puerta interactuable con cerradura por llave y apertura suave mediante rotación del pivote.
+    /// Puerta interactuable con soporte para puertas desbloqueadas (abrir/cerrar con E para cortar línea de visión)
+    /// y puertas cerradas con llave o tarjeta.
+    /// Solo las puertas bloqueadas con llave/tarjeta mantienen activo su NavMeshObstacle (carving) para bloquear al enemigo;
+    /// las puertas desbloqueadas permiten el paso de Sujeto_04 y se abren automáticamente cuando el enemigo las empuja.
     /// </summary>
     public class DoorInteractable : MonoBehaviour, IInteractable
     {
@@ -18,6 +22,10 @@ namespace CyclesHell.Interaction
         [SerializeField] private float openAngleY = 95f;
         [SerializeField] private float rotationSpeed = 3.6f;
 
+        [Header("Navegación IA")]
+        [SerializeField] private NavMeshObstacle navMeshObstacle;
+        [SerializeField] private bool allowEnemyAutoOpen = true;
+
         [Header("Indicador Visual Opcional")]
         [SerializeField] private Renderer statusLedRenderer;
         [SerializeField] private Color lockedLedColor = new Color(1.2f, 0.1f, 0.1f, 1f);
@@ -28,6 +36,10 @@ namespace CyclesHell.Interaction
         private bool isOpen;
         private float rattleTimer;
 
+        public bool IsLocked => isLocked;
+        public bool IsOpen => isOpen;
+        public bool AllowEnemyAutoOpen => allowEnemyAutoOpen;
+
         private void Awake()
         {
             if (doorPivot == null)
@@ -35,9 +47,15 @@ namespace CyclesHell.Interaction
                 doorPivot = transform;
             }
 
+            if (navMeshObstacle == null)
+            {
+                navMeshObstacle = GetComponentInChildren<NavMeshObstacle>(true);
+            }
+
             closedRotation = doorPivot.localRotation;
             openRotation = closedRotation * Quaternion.Euler(0f, openAngleY, 0f);
             UpdateLedVisual();
+            UpdateNavMeshObstacleState();
         }
 
         private void Update()
@@ -93,11 +111,28 @@ namespace CyclesHell.Interaction
                 isLocked = false;
                 isOpen = true;
                 UpdateLedVisual();
+                UpdateNavMeshObstacleState();
                 interactor.ShowStatusMessage(unlockedMessage);
                 return;
             }
 
             isOpen = !isOpen;
+        }
+
+        /// <summary>
+        /// Llamado por EnemyAI cuando Sujeto_04 se acerca a una puerta desbloqueada cerrada para empujarla y abrirla.
+        /// </summary>
+        public void OpenByEnemy()
+        {
+            if (isLocked || !allowEnemyAutoOpen || isOpen) return;
+            isOpen = true;
+        }
+
+        public void UpdateNavMeshObstacleState()
+        {
+            if (navMeshObstacle == null) return;
+            navMeshObstacle.carving = isLocked;
+            navMeshObstacle.enabled = isLocked;
         }
 
         private void UpdateLedVisual()

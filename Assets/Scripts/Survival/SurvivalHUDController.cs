@@ -242,8 +242,12 @@ namespace CyclesHell.Survival
 
             if (keyBadgeText != null)
             {
-                bool hasLabKey = playerInventory.HasKey("LabKey");
-                keyBadgeText.gameObject.SetActive(hasLabKey);
+                bool hasAnyKey = playerInventory.HasAnyKey;
+                keyBadgeText.gameObject.SetActive(hasAnyKey);
+                if (hasAnyKey)
+                {
+                    keyBadgeText.text = playerInventory.GetCollectedKeysSummary();
+                }
             }
         }
 
